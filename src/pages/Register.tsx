@@ -28,7 +28,7 @@ const Register = () => {
     idNumber: "",
     email: "",
     phone: "",
-    countryCode: "+970",
+    countryCode: "+20",
     country: "",
     city: "",
     address: "",
@@ -58,7 +58,7 @@ const Register = () => {
     { code: "+962", country: "الأردن" },
     { code: "+961", country: "لبنان" },
     { code: "+963", country: "سوريا" },
-    { code: "+20", country: "مصر" },
+    { code: "+20", country:  "مصر" },
     { code: "+966", country: "السعودية" },
     { code: "+971", country: "الإمارات" },
     { code: "+965", country: "الكويت" }
