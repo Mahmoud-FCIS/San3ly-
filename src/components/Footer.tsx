@@ -1,179 +1,168 @@
-
-import { Card, CardContent } from "@/components/ui/card";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { 
-  Facebook, 
-  Twitter, 
-  Instagram, 
-  Linkedin, 
-  Youtube,
-  Mail,
-  Phone,
-  MapPin
-} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowRight, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { toast } from "sonner";
+import logo from "../assets/logo.png"; // ✅ adjust if Login.tsx is in subfolder
 
-const Footer = () => {
-  const socialLinks = [
-    { icon: Facebook, label: "Facebook", url: "#", color: "hover:text-blue-600" },
-    { icon: Twitter, label: "Twitter", url: "#", color: "hover:text-sky-500" },
-    { icon: Instagram, label: "Instagram", url: "#", color: "hover:text-pink-600" },
-    { icon: Linkedin, label: "LinkedIn", url: "#", color: "hover:text-blue-700" },
-    { icon: Youtube, label: "YouTube", url: "#", color: "hover:text-red-600" }
-  ];
+const Login = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const { t } = useLanguage();
+  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const quickLinks = [
-    { label: "الرئيسية", url: "/" },
-    { label: "عن San3ly", url: "/about" },
-    { label: "الطلبات", url: "/requests" },
-    { label: "المصانع", url: "/factories" },
-    { label: "تواصل معنا", url: "/contact" }
-  ];
+  const handleLogin = async () => {
+    if (!email || !password) {
+      toast.error("يرجى ملء جميع الحقول");
+      return;
+    }
 
-  const supportLinks = [
-    { label: "مركز المساعدة", url: "#" },
-    { label: "الأسئلة الشائعة", url: "#" },
-    { label: "شروط الاستخدام", url: "#" },
-    { label: "سياسة الخصوصية", url: "#" },
-    { label: "سياسة الاسترداد", url: "#" }
-  ];
+    setLoading(true);
+    try {
+      await login(email, password);
+
+      if (email.toLowerCase() === "admin@gmail.com" && password === "123456") {
+        toast.success("مرحباً بك في لوحة التحكم الرئيسية");
+        navigate("/master");
+      } else {
+        toast.success("تم تسجيل الدخول بنجاح");
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("خطأ في تسجيل الدخول. يرجى التحقق من البيانات والمحاولة مرة أخرى");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <footer className="bg-gray-900 text-white">
-      {/* Main Footer */}
-      <div className="px-4 py-12">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {/* Company Info */}
-            <div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
-                </div>
-                <h2 className="text-xl font-bold">San3ly</h2>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 sm:px-6">
+      <div className="w-full max-w-md">
+        {/* Logo Section */}
+        <div className="text-center mb-6 sm:mb-8">
+          <img
+            src={logo}
+            alt="San3ly Logo"
+            className="h-16 sm:h-20 w-auto mx-auto mb-3 sm:mb-4 object-contain"
+          />
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+            منصة ربط المصانع والعملاء
+          </p>
+        </div>
+
+        {/* Login Form */}
+        <Card className="shadow-lg dark:bg-gray-800 dark:border-gray-700">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-center text-xl sm:text-2xl dark:text-white">
+              {t("login")}
+            </CardTitle>
+            <p className="text-center text-sm sm:text-base text-gray-600 dark:text-gray-300">
+              أهلاً بعودتك! سجل دخولك للمتابعة
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 sm:space-y-6">
+            {/* Email Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                البريد الإلكتروني
+              </label>
+              <div className="relative">
+                <Mail className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+                <Input
+                  type="email"
+                  placeholder="أدخل بريدك الإلكتروني"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pr-10 h-11 sm:h-12 text-sm sm:text-base dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
               </div>
-              <p className="text-gray-300 text-sm mb-6 leading-relaxed">
-                منصة رائدة تربط بين المصانع والعملاء لتحقيق أفضل حلول التصنيع في المنطقة.
+            </div>
+
+            {/* Password Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                كلمة المرور
+              </label>
+              <div className="relative">
+                <Lock className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="أدخل كلمة المرور"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10 pl-10 h-11 sm:h-12 text-sm sm:text-base dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Forgot Password */}
+            <div className="text-left">
+              <Button
+                variant="link"
+                className="text-green-600 dark:text-green-400 p-0 h-auto text-sm"
+              >
+                نسيت كلمة المرور؟
+              </Button>
+            </div>
+
+            {/* Login Button */}
+            <Button
+              className="w-full bg-green-600 hover:bg-green-700 text-white h-11 sm:h-12 text-base sm:text-lg"
+              onClick={handleLogin}
+              disabled={loading}
+            >
+              {loading ? "جاري تسجيل الدخول..." : t("login")}
+            </Button>
+
+            {/* Sign Up Link */}
+            <div className="text-center pt-4">
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+                ليس لديك حساب؟{" "}
+                <Button
+                  variant="link"
+                  className="text-green-600 dark:text-green-400 p-0 h-auto font-semibold text-sm sm:text-base"
+                  onClick={() => navigate("/register")}
+                >
+                  إنشاء حساب جديد
+                </Button>
               </p>
-              
-              {/* Contact Info */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <Mail className="w-4 h-4 text-green-500" />
-                  <span className="text-gray-300">info@san3ly.com</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Phone className="w-4 h-4 text-green-500" />
-                  <span className="text-gray-300">+201000459718</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <MapPin className="w-4 h-4 text-green-500" />
-                  <span className="text-gray-300">القاهرة، مصر</span>
-                </div>
-              </div>
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Quick Links */}
-            <div>
-              <h3 className="text-lg font-semibold mb-6">روابط سريعة</h3>
-              <ul className="space-y-3">
-                {quickLinks.map((link, index) => (
-                  <li key={index}>
-                    <a
-                      href={link.url}
-                      className="text-gray-300 hover:text-green-500 transition-colors text-sm"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Support */}
-            <div>
-              <h3 className="text-lg font-semibold mb-6">الدعم</h3>
-              <ul className="space-y-3">
-                {supportLinks.map((link, index) => (
-                  <li key={index}>
-                    <a
-                      href={link.url}
-                      className="text-gray-300 hover:text-green-500 transition-colors text-sm"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Follow Us */}
-            <div>
-              <h3 className="text-lg font-semibold mb-6">تابعنا</h3>
-              <p className="text-gray-300 text-sm mb-4">
-                ابق على اطلاع بآخر الأخبار والتحديثات
-              </p>
-              
-              {/* Social Media Icons */}
-              <div className="flex gap-3 mb-6">
-                {socialLinks.map((social, index) => {
-                  const Icon = social.icon;
-                  return (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      size="icon"
-                      className={`bg-gray-800 border-gray-700 text-gray-300 ${social.color} hover:bg-gray-700 transition-colors`}
-                      asChild
-                    >
-                      <a href={social.url} aria-label={social.label}>
-                        <Icon className="w-4 h-4" />
-                      </a>
-                    </Button>
-                  );
-                })}
-              </div>
-
-              {/* Newsletter */}
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-4">
-                  <h4 className="text-sm font-semibold text-white mb-2">
-                    النشرة الإخبارية
-                  </h4>
-                  <p className="text-xs text-gray-400 mb-3">
-                    اشترك لتصلك آخر الأخبار
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      placeholder="بريدك الإلكتروني"
-                      className="flex-1 px-3 py-2 text-xs bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
-                    />
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-xs">
-                      اشتراك
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+        {/* Back to Home */}
+        <div className="text-center mt-4 sm:mt-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 text-sm sm:text-base"
+          >
+            <ArrowRight className="w-4 h-4 ml-2" />
+            العودة للصفحة الرئيسية
+          </Button>
         </div>
       </div>
-
-      {/* Bottom Footer */}
-      <div className="border-t border-gray-800 px-4 py-6">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-gray-400">
-            © 2025 San3ly. جميع الحقوق محفوظة.
-          </div>
-          <div className="flex items-center gap-4 text-sm text-gray-400">
-            <span>v1.0.0</span>
-            <span>•</span>
-            <span>صنع بـ ❤️ في مصر</span>
-          </div>
-        </div>
-      </div>
-    </footer>
+    </div>
   );
 };
 
-export default Footer;
+export default Login;
