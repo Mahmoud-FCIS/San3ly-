@@ -1,5 +1,7 @@
 import { useEffect } from "react";
-import logo from "./assets/logo.png"; // adjust the path if needed
+import logo from "../assets/logo.png";
+
+
 
 const Splash = () => {
   useEffect(() => {
