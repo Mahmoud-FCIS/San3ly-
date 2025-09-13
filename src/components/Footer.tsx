@@ -163,12 +163,12 @@ const Footer = () => {
       <div className="border-t border-gray-800 px-4 py-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-sm text-gray-400">
-            © 2024 San3ly. جميع الحقوق محفوظة.
+            © 2025 San3ly. جميع الحقوق محفوظة.
           </div>
           <div className="flex items-center gap-4 text-sm text-gray-400">
             <span>v1.0.0</span>
             <span>•</span>
-            <span>صنع بـ ❤️ في فلسطين</span>
+            <span>صنع بـ ❤️ في مصر</span>
           </div>
         </div>
       </div>

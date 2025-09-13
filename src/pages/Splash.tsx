@@ -47,7 +47,7 @@ const Splash = () => {
           مرحباً بك في مستقبل التصنيع
         </p>
         <p className="text-green-200 text-sm animate-fade-in-delayed opacity-80">
-          v1.0.0
+          
         </p>
       </div>
 

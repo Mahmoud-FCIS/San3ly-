@@ -1,4 +1,3 @@
-
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Home, FileText, Factory, MessageSquare, User, Info, Phone, Moon, Sun, Settings } from "lucide-react";
@@ -6,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import LanguageSelector from "./LanguageSelector";
+import logo from "../assets/logo.png"; // adjust if file is in a different path
 
 const NavigationHeader = () => {
   const navigate = useNavigate();
@@ -23,7 +23,6 @@ const NavigationHeader = () => {
     { icon: Phone, label: t('contact'), path: "/contact" }
   ];
 
-  // Add master page for admin users
   if (isAdmin) {
     navigationItems.push({ icon: Settings, label: "Master Page", path: "/master" });
   }
@@ -45,11 +44,14 @@ const NavigationHeader = () => {
           <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-lg flex items-center justify-center shadow-lg">
             <span className="text-white font-bold text-lg">S</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">SAN3LY</h1>
+          <img
+            src={logo}
+            alt="San3ly Logo"
+            className="h-8 w-auto object-contain"
+          />
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Navigation Items - Only show when logged in */}
           {currentUser && (
             <nav className="hidden md:flex items-center gap-1">
               {navigationItems.map((item) => {
@@ -74,7 +76,6 @@ const NavigationHeader = () => {
             </nav>
           )}
 
-          {/* Profile Button - Only show when logged in */}
           {currentUser && (
             <Button
               variant="ghost"
@@ -91,10 +92,8 @@ const NavigationHeader = () => {
             </Button>
           )}
 
-          {/* Language Selector */}
           <LanguageSelector />
 
-          {/* Theme Toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -104,7 +103,6 @@ const NavigationHeader = () => {
             {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
           </Button>
 
-          {/* Login/Register buttons when not logged in */}
           {!currentUser && (
             <div className="flex items-center gap-2 ml-4">
               <Button
