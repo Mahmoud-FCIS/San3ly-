@@ -1,4 +1,3 @@
-
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -11,6 +10,7 @@ import {
   Phone,
   MapPin
 } from "lucide-react";
+import logo from "./assets/logo.png"; // ✅ adjust if Footer.tsx is in a subfolder
 
 const Footer = () => {
   const socialLinks = [
@@ -46,10 +46,11 @@ const Footer = () => {
             {/* Company Info */}
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
-                </div>
-                <h2 className="text-xl font-bold">San3ly</h2>
+                <img
+                  src={logo}
+                  alt="San3ly Logo"
+                  className="h-10 w-auto object-contain"
+                />
               </div>
               <p className="text-gray-300 text-sm mb-6 leading-relaxed">
                 منصة رائدة تربط بين المصانع والعملاء لتحقيق أفضل حلول التصنيع في المنطقة.
