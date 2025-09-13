@@ -41,9 +41,7 @@ const NavigationHeader = () => {
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-4 cursor-pointer" onClick={handleLogoClick}>
-          <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-lg flex items-center justify-center shadow-lg">
-            <span className="text-white font-bold text-lg">S</span>
-          </div>
+
           <img
             src={logo}
             alt="San3ly Logo"
