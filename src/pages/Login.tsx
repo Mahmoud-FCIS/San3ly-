@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
+import logo from "../assets/logo.png"; // ✅ path is correct if Login.tsx is in src/
 
 const Login = () => {
   const navigate = useNavigate();
@@ -54,7 +54,14 @@ const Login = () => {
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-600 to-green-700 rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg">
             <span className="text-xl sm:text-2xl font-bold text-white">S</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">SANعLY</h2>
+
+          {/* Replaced SAN3LY text with logo image */}
+          <img
+            src={logo}
+            alt="San3ly Logo"
+            className="h-9 sm:h-10 w-auto mx-auto mb-2 object-contain"
+          />
+
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">منصة ربط المصانع والعملاء</p>
         </div>
 
