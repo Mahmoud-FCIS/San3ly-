@@ -25,12 +25,15 @@ import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import MasterPage from "./pages/MasterPage";
 import NavigationHeader from "./components/NavigationHeader";
+import Footer from "./components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 
 const queryClient = new QueryClient();
 
 const AppContent = () => {
   const location = useLocation();
   const isMasterPage = location.pathname === '/master';
+  const { currentUser } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -54,6 +57,8 @@ const AppContent = () => {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
+      {/* Show Footer only if user is signed in */}
+      {currentUser && !isMasterPage && <Footer />}
     </div>
   );
 };

@@ -45,7 +45,7 @@ const NavigationHeader = () => {
           <img
             src={logo}
             alt="San3ly Logo"
-            className="h-12 w-auto object-contain"
+            className="h-18 w-auto object-contain"
           />
         </div>
 
