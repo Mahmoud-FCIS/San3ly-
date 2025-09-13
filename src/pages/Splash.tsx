@@ -22,8 +22,11 @@ const Splash = () => {
         {/* Animated Logo */}
         <div className="relative mb-8">
           <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mx-auto backdrop-blur-sm border border-white/30 animate-pulse-glow relative overflow-hidden">
-            <span className="text-6xl font-bold text-white animate-bounce-subtle">S</span>
-            
+            <img
+              src={require("../assets/logo.png")}
+              alt="San3ly Logo"
+              className="w-24 h-24 object-contain animate-bounce-subtle"
+            />
             {/* Ripple Effect */}
             <div className="absolute inset-0 rounded-full border-2 border-white/40 animate-ping"></div>
             <div className="absolute inset-4 rounded-full border-2 border-white/30 animate-ping animation-delay-75"></div>
