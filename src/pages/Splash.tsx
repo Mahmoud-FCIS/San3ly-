@@ -23,7 +23,7 @@ const Splash = () => {
       <div className="text-center z-10">
         {/* Logo Image */}
         <div className="relative mb-8">
-          <div className="w-40 h-40 mx-auto flex items-center justify-center">
+          <div className="w-60 h-60 mx-auto flex items-center justify-center">
             <img
               src={logo}
               alt="San3ly Logo"
