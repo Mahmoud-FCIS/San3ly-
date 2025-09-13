@@ -10,7 +10,7 @@ import {
   Phone,
   MapPin
 } from "lucide-react";
-import logo from "./assets/logo.png"; // ✅ adjust if Footer.tsx is in a subfolder
+import logo from "../assets/logo.png"; // ✅ adjust if Footer.tsx is in a subfolder
 
 const Footer = () => {
   const socialLinks = [
