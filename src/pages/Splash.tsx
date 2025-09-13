@@ -27,12 +27,12 @@ const Splash = () => {
             <img
               src={logo}
               alt="San3ly Logo"
-              className="w-full h-full object-contain animate-pulse-glow"
+              className="w-full h-full object-contain animate-fade-in"
             />
           </div>
         </div>
 
-        <h1 className="text-5xl font-bold text-white mb-4 animate-fade-in">San3ly</h1>
+        <h1 className="text-5xl font-bold text-white mb-4 animate-fade-in"></h1>
         <p className="text-green-100 text-xl mb-8 animate-fade-in-delayed font-light">
           منصة ربط المصانع والعملاء
         </p>
