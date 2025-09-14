@@ -223,8 +223,8 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
+      <div className="max-w-6xl mx-auto px-4 py-8 text-right">
         <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 mb-8">
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row items-center gap-6">
