@@ -51,9 +51,7 @@ const Login = () => {
       <div className="w-full max-w-md">
         {/* Logo Section */}
         <div className="text-center mb-6 sm:mb-8">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-600 to-green-700 rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg">
-            <span className="text-xl sm:text-2xl font-bold text-white">S</span>
-          </div>
+         
 
           {/* Replaced SAN3LY text with logo image */}
           <img
