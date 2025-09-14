@@ -57,7 +57,7 @@ const Login = () => {
           <img
             src={logo}
             alt="San3ly Logo"
-            className="h-14 sm:h-14 w-auto mx-auto mb-2 object-contain"
+            className="h-16 sm:h-16 w-auto mx-auto mb-2 object-contain"
           />
 
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">منصة ربط المصانع والعملاء</p>
