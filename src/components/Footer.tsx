@@ -49,7 +49,7 @@ const Footer = () => {
                 <img
                   src={logo}
                   alt="San3ly Logo"
-                  className="h-10 w-auto object-contain"
+                  className="h-14 w-auto object-contain"
                 />
               </div>
               <p className="text-gray-300 text-sm mb-6 leading-relaxed">
