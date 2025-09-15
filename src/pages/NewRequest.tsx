@@ -209,7 +209,7 @@ const NewRequest = () => {
         mainImageBase64: formData.mainImageBase64,
         extraImageBase64: formData.extraImageBase64,
         createdAt: serverTimestamp(),
-        status: "pending" as const,
+        status: "نشط" as const,
       };
 
       const coll = collection(db, "manufacturingRequests");
