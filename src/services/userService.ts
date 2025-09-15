@@ -22,6 +22,10 @@ export interface UserProfile {
   employeeCount?: string;
   certifications?: string[];
   description?: string;
+
+  // National ID images (base64)
+  idFrontBase64?: string;
+  idBackBase64?: string;
 }
 
 export const saveUserProfile = async (user: User, profileData: any): Promise<UserProfile> => {
