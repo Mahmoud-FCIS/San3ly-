@@ -1,3 +1,4 @@
+// Register.tsx
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowRight, User, Building, Mail, Lock, Eye, EyeOff, Phone, MapPin, Home, CreditCard, Camera, Globe, Fingerprint, Upload, Factory, Users } from "lucide-react";
+import { ArrowRight, User, Building, Mail, Lock, Eye, EyeOff, Phone, MapPin, Home, CreditCard, Camera, Fingerprint, Factory, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -13,6 +14,88 @@ import TermsOfService from "./TermsOfService";
 import PrivacyPolicy from "./PrivacyPolicy";
 import { specializations } from "@/data/specializations";
 
+/* ---------------- Helpers for Base64 ID images ---------------- */
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const SAFE_MAX_BYTES = 900 * 1024; // 900KB after encoding (safe for Firestore 1MiB limit)
+const MIN_W = 600;
+const MIN_H = 400;
+const TARGET_LONG_EDGE = 1600; // resize down if larger
+type AllowedMime = (typeof ALLOWED_TYPES)[number] | "image/jpeg";
+
+/** Read File -> ImageBitmap */
+async function fileToBitmap(file: File) {
+  return await createImageBitmap(file);
+}
+
+/** Canvas -> Blob (JPEG with quality) */
+function canvasToBlob(canvas: HTMLCanvasElement, mime: AllowedMime, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("Failed to create blob"))),
+      mime === "image/png" ? "image/png" : "image/jpeg",
+      mime === "image/png" ? undefined : quality
+    );
+  });
+}
+
+/** Blob -> DataURL */
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.readAsDataURL(blob);
+  });
+}
+
+/** Validate, resize, and compress to fit SAFE_MAX_BYTES; returns {dataUrl, previewUrl} */
+async function fileToSafeBase64(file: File): Promise<{ dataUrl: string; previewUrl: string }> {
+  if (!ALLOWED_TYPES.includes(file.type as any)) {
+    throw new Error("يُسمح فقط بصور: JPEG / PNG / WEBP");
+  }
+
+  const bmp = await fileToBitmap(file);
+  if (bmp.width < MIN_W || bmp.height < MIN_H) {
+    throw new Error(`أبعاد الصورة صغيرة (${bmp.width}×${bmp.height}). الحد الأدنى ${MIN_W}×${MIN_H}px.`);
+  }
+
+  // scale by longer edge
+  const isLandscape = bmp.width >= bmp.height;
+  const scale = Math.min(1, TARGET_LONG_EDGE / (isLandscape ? bmp.width : bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bmp, 0, 0, w, h);
+
+  // Try descending qualities until under SAFE_MAX_BYTES
+  const mime: AllowedMime = "image/jpeg";
+  const qualities = [0.8, 0.72, 0.64, 0.56, 0.48, 0.4, 0.32];
+  for (const q of qualities) {
+    const blob = await canvasToBlob(canvas, mime, q);
+    const dataUrl = await blobToDataURL(blob);
+    // Rough dataUrl -> bytes estimate: base64 expands ~4/3 (dataURL has header, but ok)
+    const approxBytes = Math.ceil((dataUrl.length - "data:image/jpeg;base64,".length) * 3 / 4);
+    if (approxBytes <= SAFE_MAX_BYTES) {
+      const previewUrl = URL.createObjectURL(blob);
+      return { dataUrl, previewUrl };
+    }
+  }
+
+  // Last attempt with lowest quality
+  const finalBlob = await canvasToBlob(canvas, mime, 0.25);
+  const dataUrl = await blobToDataURL(finalBlob);
+  const approxBytes = Math.ceil((dataUrl.length - "data:image/jpeg;base64,".length) * 3 / 4);
+  if (approxBytes > SAFE_MAX_BYTES) {
+    throw new Error("تعذّر تقليل حجم الصورة إلى الحدّ الآمن. جرّب صورة أوضح أو أصغر.");
+  }
+  const previewUrl = URL.createObjectURL(finalBlob);
+  return { dataUrl, previewUrl };
+}
+
+/* ---------------- Component ---------------- */
 const Register = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -22,7 +105,7 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     fullName: "",
     idNumber: "",
@@ -39,8 +122,16 @@ const Register = () => {
     factoryAddress: "",
     specialization: "",
     commercialRecord: null as File | null,
-    taxCard: null as File | null
+    taxCard: null as File | null,
+    // NEW: ID images as Base64 (safe size)
+    idFrontBase64: "" as string,
+    idBackBase64: "" as string,
   });
+
+  // previews
+  const [idFrontPreview, setIdFrontPreview] = useState<string>("");
+  const [idBackPreview, setIdBackPreview] = useState<string>("");
+  const [idError, setIdError] = useState<string>("");
 
   const countries = [
     { code: "PS", name: "فلسطين", cities: ["رام الله", "غزة", "الخليل", "نابلس", "جنين", "بيت لحم"] },
@@ -70,10 +161,6 @@ const Register = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFileUpload = (field: string, file: File | null) => {
-    setFormData(prev => ({ ...prev, [field]: file }));
-  };
-
   const handleNext = () => {
     if (currentStep === 1 && accountType) {
       setCurrentStep(2);
@@ -82,19 +169,77 @@ const Register = () => {
     }
   };
 
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    } else {
+      navigate('/');
+    }
+  };
+
+  /* --------------- ID picker handlers --------------- */
+  async function onPickID(e: React.ChangeEvent<HTMLInputElement>, side: "front" | "back") {
+    try {
+      setIdError("");
+      const f = e.target.files?.[0];
+      if (!f) return;
+      if (!ALLOWED_TYPES.includes(f.type as any)) {
+        throw new Error("اختر صورة بصيغة JPEG أو PNG أو WEBP.");
+      }
+      // convert to safe base64 (resize + compress)
+      const { dataUrl, previewUrl } = await fileToSafeBase64(f);
+      setFormData(prev => ({
+        ...prev,
+        idFrontBase64: side === "front" ? dataUrl : prev.idFrontBase64,
+        idBackBase64: side === "back" ? dataUrl : prev.idBackBase64,
+      }));
+      if (side === "front") {
+        if (idFrontPreview) URL.revokeObjectURL(idFrontPreview);
+        setIdFrontPreview(previewUrl);
+      } else {
+        if (idBackPreview) URL.revokeObjectURL(idBackPreview);
+        setIdBackPreview(previewUrl);
+      }
+      toast.success(`تم تجهيز صورة ${side === "front" ? "الوجه" : "الظهر"} بالحجم الآمن ✅`);
+    } catch (err: any) {
+      console.error(err);
+      setIdError(err?.message || "ملف غير صالح");
+      toast.error(err?.message || "ملف غير صالح");
+    } finally {
+      // reset input value so same file can be re-selected if needed
+      e.target.value = "";
+    }
+  }
+
+  function clearID(side: "front" | "back") {
+    setFormData(prev => ({
+      ...prev,
+      idFrontBase64: side === "front" ? "" : prev.idFrontBase64,
+      idBackBase64: side === "back" ? "" : prev.idBackBase64,
+    }));
+    if (side === "front" && idFrontPreview) { URL.revokeObjectURL(idFrontPreview); setIdFrontPreview(""); }
+    if (side === "back" && idBackPreview) { URL.revokeObjectURL(idBackPreview); setIdBackPreview(""); }
+  }
+
   const handleRegister = async () => {
     if (formData.password !== formData.confirmPassword) {
       toast.error("كلمات المرور غير متطابقة");
       return;
     }
 
-    if (!formData.email || !formData.password) {
+    if (!formData.email || !formData.password || !formData.fullName || !formData.idNumber) {
       toast.error("يرجى ملء جميع الحقول المطلوبة");
       return;
     }
 
     if (!acceptedTerms) {
       toast.error("يجب الموافقة على الشروط والأحكام");
+      return;
+    }
+
+    // Must provide both ID sides
+    if (!formData.idFrontBase64 || !formData.idBackBase64) {
+      toast.error("يرجى رفع صورتي البطاقة (الوجه والظهر)");
       return;
     }
 
@@ -106,12 +251,12 @@ const Register = () => {
 
     setLoading(true);
     try {
-      // Prepare profile data
+      // NOTE: profileData includes idFrontBase64 & idBackBase64 as Base64 strings (≤900KB each)
       const profileData = {
         ...formData,
-        accountType
+        accountType,
       };
-      
+
       await register(formData.email, formData.password, profileData);
       console.log("Registration data:", { accountType, ...formData });
       toast.success("تم إنشاء الحساب بنجاح");
@@ -121,14 +266,6 @@ const Register = () => {
       toast.error("خطأ في إنشاء الحساب. يرجى المحاولة مرة أخرى");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    } else {
-      navigate('/');
     }
   };
 
@@ -259,19 +396,69 @@ const Register = () => {
                   </div>
                 </div>
 
-                {/* ID Photo Upload */}
+                {/* ID Photo Upload (Front + Back) */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">صور البطاقة *</label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
-                      <Camera className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600 dark:text-gray-400">صورة الوجه</p>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    صور البطاقة * <span className="text-xs text-gray-500">(يتم الضغط تلقائيًا — حد آمن ≤ 900KB لكل صورة)</span>
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Front */}
+                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <Camera className="w-5 h-5 text-gray-400" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">صورة الوجه</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => onPickID(e, "front")}
+                        className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-700 dark:file:text-gray-200 dark:hover:file:bg-gray-600"
+                      />
+                      {idFrontPreview ? (
+                        <div className="relative mt-3">
+                          <img
+                            src={idFrontPreview}
+                            alt="front"
+                            className="w-full max-h-56 object-cover rounded-md"
+                          />
+                          <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => clearID("front")}>
+                            حذف
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 mt-2">الأنواع المسموحة: JPEG/PNG/WEBP</p>
+                      )}
                     </div>
-                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
-                      <Camera className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600 dark:text-gray-400">صورة الظهر</p>
+
+                    {/* Back */}
+                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <Camera className="w-5 h-5 text-gray-400" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">صورة الظهر</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => onPickID(e, "back")}
+                        className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-700 dark:file:text-gray-200 dark:hover:file:bg-gray-600"
+                      />
+                      {idBackPreview ? (
+                        <div className="relative mt-3">
+                          <img
+                            src={idBackPreview}
+                            alt="back"
+                            className="w-full max-h-56 object-cover rounded-md"
+                          />
+                          <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => clearID("back")}>
+                            حذف
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 mt-2">الأنواع المسموحة: JPEG/PNG/WEBP</p>
+                      )}
                     </div>
                   </div>
+                  {idError && <p className="text-sm text-red-600 mt-1">{idError}</p>}
                 </div>
 
                 {/* Factory Information (for manufacturer and both types) */}
