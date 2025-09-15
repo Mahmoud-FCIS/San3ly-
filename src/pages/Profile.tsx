@@ -18,9 +18,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getUserRequests, ManufacturingRequest } from "@/services/requestService";
 
-/* ===== Firebase (تأكد من المسار الصحيح لتهيئتك) ===== */
+/* ===== Firebase ===== */
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
 import { db } from "@/lib/firebase";
 
 /* ==================== Helpers: JPEG Base64 ≤ 900KB ==================== */
@@ -31,10 +30,8 @@ const MIN_H = 300;
 const TARGET_LONG_EDGE = 800;
 
 async function fileToBitmap(file: File) {
-  // createImageBitmap مدعومة في المتصفحات الحديثة؛ fallback ممكن عبر Image() لو احتجت
   return await createImageBitmap(file);
 }
-
 function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -44,7 +41,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob>
     );
   });
 }
-
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve) => {
     const r = new FileReader();
@@ -52,7 +48,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
     r.readAsDataURL(blob);
   });
 }
-
 /** تصغير + ضغط حتى ≤ 900KB وإرجاع DataURL + preview */
 async function fileToSafeBase64(file: File): Promise<{ dataUrl: string; previewUrl: string }> {
   if (!ALLOWED_TYPES.includes(file.type as any)) {
@@ -62,8 +57,6 @@ async function fileToSafeBase64(file: File): Promise<{ dataUrl: string; previewU
   if (bmp.width < MIN_W || bmp.height < MIN_H) {
     throw new Error(`أبعاد الصورة صغيرة (${bmp.width}×${bmp.height}). الحد الأدنى ${MIN_W}×${MIN_H}px.`);
   }
-
-  // تغيير الحجم وفقًا لأطول ضلع
   const isLandscape = bmp.width >= bmp.height;
   const scale = Math.min(1, TARGET_LONG_EDGE / (isLandscape ? bmp.width : bmp.height));
   const w = Math.max(1, Math.round(bmp.width * scale));
@@ -95,7 +88,6 @@ const Profile = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
   const [userRequests, setUserRequests] = useState<ManufacturingRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -103,6 +95,8 @@ const Profile = () => {
     newPassword: "",
     confirmNewPassword: ""
   });
+
+  // عرض/إخفاء كلمات المرور
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -121,11 +115,11 @@ const Profile = () => {
     factoryName: ''
   });
 
-  // صور البطاقة (لعرضها في "ملفاتي")
+  // صور البطاقة لعرضها في "ملفاتي"
   const [idFront, setIdFront] = useState<string>("");
   const [idBack, setIdBack] = useState<string>("");
 
-  // Dialog لرفع صورة البروفايل
+  // Dialog لصورة البروفايل
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string>("");
@@ -145,33 +139,28 @@ const Profile = () => {
         address: userProfile.address || '',
         factoryName: userProfile.factoryName || ''
       });
-
       // لو الحقول موجودة في userProfile
-      if (userProfile.idFrontBase64) setIdFront(userProfile.idFrontBase64);
-      if (userProfile.idBackBase64) setIdBack(userProfile.idBackBase64);
+      if ((userProfile as any).idFrontBase64) setIdFront((userProfile as any).idFrontBase64);
+      if ((userProfile as any).idBackBase64) setIdBack((userProfile as any).idBackBase64);
     }
   }, [userProfile]);
 
   useEffect(() => {
     if (currentUser) {
       loadUserRequests();
-      // جلب صور البطاقة من Firestore إذا غير موجودة في الcontext
-      if (!userProfile?.idFrontBase64 || !userProfile?.idBackBase64) {
-        fetchIdImages(currentUser.uid).catch(() => {});
+      // جلب صور البطاقة من Firestore إذا لم تكن بالكونتكست
+      if (!idFront || !idBack) {
+        (async () => {
+          try {
+            const snap = await getDoc(doc(db, "users", currentUser.uid));
+            const data = snap.data();
+            if (data?.idFrontBase64) setIdFront(data.idFrontBase64);
+            if (data?.idBackBase64) setIdBack(data.idBackBase64);
+          } catch {}
+        })();
       }
     }
   }, [currentUser]);
-
-  const fetchIdImages = async (uid: string) => {
-    try {
-      const snap = await getDoc(doc(db, "users", uid));
-      const data = snap.data();
-      if (data?.idFrontBase64) setIdFront(data.idFrontBase64);
-      if (data?.idBackBase64) setIdBack(data.idBackBase64);
-    } catch (e) {
-      console.warn("Failed to fetch ID images:", e);
-    }
-  };
 
   const loadUserRequests = async () => {
     if (!currentUser) return;
@@ -188,24 +177,9 @@ const Profile = () => {
   };
 
   const stats = [
-    {
-      icon: FileText,
-      value: userRequests.filter(req => req.status === 'مكتمل').length.toString(),
-      labelAr: "طلب مكتمل",
-      labelEn: "Completed Requests"
-    },
-    {
-      icon: Factory,
-      value: userRequests.filter(req => req.status === 'قيد التنفيذ').length.toString(),
-      labelAr: "قيد التنفيذ",
-      labelEn: "In Progress"
-    },
-    {
-      icon: Star,
-      value: "4.8",
-      labelAr: "تقييم العملاء",
-      labelEn: "Client Rating"
-    }
+    { icon: FileText, value: userRequests.filter(req => req.status === 'مكتمل').length.toString(), labelAr: "طلب مكتمل", labelEn: "Completed Requests" },
+    { icon: Factory,  value: userRequests.filter(req => req.status === 'قيد التنفيذ').length.toString(), labelAr: "قيد التنفيذ", labelEn: "In Progress" },
+    { icon: Star,     value: "4.8", labelAr: "تقييم العملاء", labelEn: "Client Rating" }
   ];
 
   const handleSave = async () => {
@@ -244,12 +218,10 @@ const Profile = () => {
       toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
       return;
     }
-
     setLoading(true);
     try {
       await changePassword(passwordData.currentPassword, passwordData.newPassword);
       toast.success("تم تغيير كلمة المرور بنجاح");
-      setShowChangePassword(false);
       setPasswordData({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
     } catch (error) {
       console.error('Error changing password:', error);
@@ -262,7 +234,6 @@ const Profile = () => {
   const handleInputChange = (field: string, value: string) => {
     setProfileData(prev => ({ ...prev, [field]: value }));
   };
-
   const handleLogout = async () => {
     try {
       await logout();
@@ -300,24 +271,14 @@ const Profile = () => {
       return;
     }
     try {
-      // تأكيد الحجم الآمن
-      const max = SAFE_MAX_BYTES;
       const size = Math.ceil((avatarDataUrl.length - "data:image/jpeg;base64,".length) * 3 / 4);
-      if (size > max) {
-        throw new Error("حجم صورة البروفايل أكبر من الحد الآمن (900KB)");
-      }
+      if (size > SAFE_MAX_BYTES) throw new Error("حجم صورة البروفايل أكبر من الحد الآمن (900KB)");
 
-      // حفظ في Firestore
       await setDoc(
         doc(db, "users", currentUser.uid),
-        {
-          avatar: avatarDataUrl,
-          avatarUpdatedAt: serverTimestamp(),
-        },
+        { avatar: avatarDataUrl, avatarUpdatedAt: serverTimestamp() },
         { merge: true }
       );
-
-      // تحديث العرض الحالي
       setProfileData(prev => ({ ...prev, avatar: avatarDataUrl }));
       toast.success("تم تحديث صورة البروفايل بنجاح ✅");
       setAvatarDialogOpen(false);
@@ -354,6 +315,7 @@ const Profile = () => {
                   </AvatarFallback>
                 </Avatar>
 
+                {/* زر القلم + الـ Dialog لاختيار صورة البروفايل */}
                 <Dialog open={avatarDialogOpen} onOpenChange={(v) => {
                   setAvatarDialogOpen(v);
                   if (!v && avatarPreview) { URL.revokeObjectURL(avatarPreview); setAvatarPreview(""); setAvatarDataUrl(""); setAvatarError(""); }
@@ -494,7 +456,7 @@ const Profile = () => {
           })}
         </div>
 
-        {/* Tabs: أضفنا "ملفاتي" + عدّلنا grid-cols إلى 5 */}
+        {/* Tabs: أضفنا "ملفاتي" بجانب الإعدادات، وباقي التبويبات كما هي */}
         <Tabs defaultValue="personal" className="space-y-6">
           <TabsList className="grid w-full grid-cols-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <TabsTrigger value="personal" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
@@ -544,11 +506,7 @@ const Profile = () => {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {language === 'ar' ? 'البريد الإلكتروني' : 'Email'}
                     </label>
-                    <Input
-                      value={profileData.email}
-                      disabled
-                      className="bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-600"
-                    />
+                    <Input value={profileData.email} disabled className="bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-600" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -695,9 +653,7 @@ const Profile = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    كلمة المرور الحالية
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة المرور الحالية</label>
                   <div className="relative">
                     <Input
                       type={showCurrentPassword ? "text" : "password"}
@@ -716,9 +672,7 @@ const Profile = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      كلمة المرور الجديدة
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة المرور الجديدة</label>
                     <div className="relative">
                       <Input
                         type={showNewPassword ? "text" : "password"}
@@ -736,9 +690,7 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      تأكيد كلمة المرور الجديدة
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">تأكيد كلمة المرور الجديدة</label>
                     <div className="relative">
                       <Input
                         type={showConfirmPassword ? "text" : "password"}
@@ -754,10 +706,6 @@ const Profile = () => {
                       </button>
                     </div>
                   </div>
-                </div>
-
-                <div className="pt-2">
-                  <Button onClick={handleChangePassword}>تغيير كلمة المرور</Button>
                 </div>
               </CardContent>
             </Card>
