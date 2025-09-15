@@ -6,7 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowRight, User, Building, Mail, Lock, Eye, EyeOff, Phone, MapPin, Home, CreditCard, Camera, Fingerprint, Factory, Users } from "lucide-react";
+import {
+  ArrowRight, User, Building, Mail, Lock, Eye, EyeOff, Phone, MapPin, Home,
+  CreditCard, Camera, Fingerprint, Factory, Users
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -14,31 +17,38 @@ import TermsOfService from "./TermsOfService";
 import PrivacyPolicy from "./PrivacyPolicy";
 import { specializations } from "@/data/specializations";
 
-/* ---------------- Helpers for Base64 ID images ---------------- */
+// --- Firebase (عدّل المسار لو مختلف عندك) ---
+import { getAuth } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+/* ==================== Helpers: JPEG Base64 ≤ 900KB ==================== */
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-const SAFE_MAX_BYTES = 900 * 1024; // 900KB after encoding (safe for Firestore 1MiB limit)
+const SAFE_MAX_BYTES = 900 * 1024; // 900KB
 const MIN_W = 600;
 const MIN_H = 400;
-const TARGET_LONG_EDGE = 1600; // resize down if larger
+const TARGET_LONG_EDGE = 1600;
+
 type AllowedMime = (typeof ALLOWED_TYPES)[number] | "image/jpeg";
 
-/** Read File -> ImageBitmap */
 async function fileToBitmap(file: File) {
   return await createImageBitmap(file);
 }
 
-/** Canvas -> Blob (JPEG with quality) */
-function canvasToBlob(canvas: HTMLCanvasElement, mime: AllowedMime, quality: number): Promise<Blob> {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mime: AllowedMime,
+  quality: number
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("Failed to create blob"))),
-      mime === "image/png" ? "image/png" : "image/jpeg",
-      mime === "image/png" ? undefined : quality
+      "image/jpeg",
+      quality
     );
   });
 }
 
-/** Blob -> DataURL */
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve) => {
     const r = new FileReader();
@@ -47,55 +57,40 @@ function blobToDataURL(blob: Blob): Promise<string> {
   });
 }
 
-/** Validate, resize, and compress to fit SAFE_MAX_BYTES; returns {dataUrl, previewUrl} */
+/** تصغير + ضغط حتى ≤ 900KB وإرجاع DataURL + preview */
 async function fileToSafeBase64(file: File): Promise<{ dataUrl: string; previewUrl: string }> {
   if (!ALLOWED_TYPES.includes(file.type as any)) {
     throw new Error("يُسمح فقط بصور: JPEG / PNG / WEBP");
   }
-
   const bmp = await fileToBitmap(file);
   if (bmp.width < MIN_W || bmp.height < MIN_H) {
     throw new Error(`أبعاد الصورة صغيرة (${bmp.width}×${bmp.height}). الحد الأدنى ${MIN_W}×${MIN_H}px.`);
   }
 
-  // scale by longer edge
   const isLandscape = bmp.width >= bmp.height;
   const scale = Math.min(1, TARGET_LONG_EDGE / (isLandscape ? bmp.width : bmp.height));
   const w = Math.max(1, Math.round(bmp.width * scale));
   const h = Math.max(1, Math.round(bmp.height * scale));
 
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(bmp, 0, 0, w, h);
 
-  // Try descending qualities until under SAFE_MAX_BYTES
-  const mime: AllowedMime = "image/jpeg";
-  const qualities = [0.8, 0.72, 0.64, 0.56, 0.48, 0.4, 0.32];
+  const qualities = [0.8, 0.72, 0.64, 0.56, 0.48, 0.4, 0.32, 0.25];
   for (const q of qualities) {
-    const blob = await canvasToBlob(canvas, mime, q);
+    const blob = await canvasToBlob(canvas, "image/jpeg", q);
     const dataUrl = await blobToDataURL(blob);
-    // Rough dataUrl -> bytes estimate: base64 expands ~4/3 (dataURL has header, but ok)
     const approxBytes = Math.ceil((dataUrl.length - "data:image/jpeg;base64,".length) * 3 / 4);
     if (approxBytes <= SAFE_MAX_BYTES) {
       const previewUrl = URL.createObjectURL(blob);
       return { dataUrl, previewUrl };
     }
   }
-
-  // Last attempt with lowest quality
-  const finalBlob = await canvasToBlob(canvas, mime, 0.25);
-  const dataUrl = await blobToDataURL(finalBlob);
-  const approxBytes = Math.ceil((dataUrl.length - "data:image/jpeg;base64,".length) * 3 / 4);
-  if (approxBytes > SAFE_MAX_BYTES) {
-    throw new Error("تعذّر تقليل حجم الصورة إلى الحدّ الآمن. جرّب صورة أوضح أو أصغر.");
-  }
-  const previewUrl = URL.createObjectURL(finalBlob);
-  return { dataUrl, previewUrl };
+  throw new Error("تعذّر تقليل حجم الصورة إلى الحدّ الآمن. جرّب صورة أوضح أو أصغر.");
 }
+/* ================== End helpers ================== */
 
-/* ---------------- Component ---------------- */
 const Register = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -123,12 +118,12 @@ const Register = () => {
     specialization: "",
     commercialRecord: null as File | null,
     taxCard: null as File | null,
-    // NEW: ID images as Base64 (safe size)
+    // NEW: ID images
     idFrontBase64: "" as string,
     idBackBase64: "" as string,
   });
 
-  // previews
+  // previews + error
   const [idFrontPreview, setIdFrontPreview] = useState<string>("");
   const [idBackPreview, setIdBackPreview] = useState<string>("");
   const [idError, setIdError] = useState<string>("");
@@ -161,23 +156,6 @@ const Register = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleNext = () => {
-    if (currentStep === 1 && accountType) {
-      setCurrentStep(2);
-    } else if (currentStep === 2) {
-      setCurrentStep(3);
-    }
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    } else {
-      navigate('/');
-    }
-  };
-
-  /* --------------- ID picker handlers --------------- */
   async function onPickID(e: React.ChangeEvent<HTMLInputElement>, side: "front" | "back") {
     try {
       setIdError("");
@@ -186,7 +164,6 @@ const Register = () => {
       if (!ALLOWED_TYPES.includes(f.type as any)) {
         throw new Error("اختر صورة بصيغة JPEG أو PNG أو WEBP.");
       }
-      // convert to safe base64 (resize + compress)
       const { dataUrl, previewUrl } = await fileToSafeBase64(f);
       setFormData(prev => ({
         ...prev,
@@ -206,8 +183,7 @@ const Register = () => {
       setIdError(err?.message || "ملف غير صالح");
       toast.error(err?.message || "ملف غير صالح");
     } finally {
-      // reset input value so same file can be re-selected if needed
-      e.target.value = "";
+      e.target.value = ""; // يسمح بإعادة اختيار نفس الملف
     }
   }
 
@@ -221,6 +197,22 @@ const Register = () => {
     if (side === "back" && idBackPreview) { URL.revokeObjectURL(idBackPreview); setIdBackPreview(""); }
   }
 
+  const handleNext = () => {
+    if (currentStep === 1 && accountType) {
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      setCurrentStep(3);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    } else {
+      navigate('/');
+    }
+  };
+
   const handleRegister = async () => {
     if (formData.password !== formData.confirmPassword) {
       toast.error("كلمات المرور غير متطابقة");
@@ -232,38 +224,56 @@ const Register = () => {
       return;
     }
 
-    if (!acceptedTerms) {
-      toast.error("يجب الموافقة على الشروط والأحكام");
-      return;
-    }
-
-    // Must provide both ID sides
     if (!formData.idFrontBase64 || !formData.idBackBase64) {
       toast.error("يرجى رفع صورتي البطاقة (الوجه والظهر)");
       return;
     }
 
+    if (!acceptedTerms) {
+      toast.error("يجب الموافقة على الشروط والأحكام");
+      return;
+    }
+
     // Additional validation for factory accounts
-    if ((accountType === 'manufacturer' || accountType === 'both') && (!formData.factoryName || !formData.factoryAddress || !formData.specialization)) {
+    if ((accountType === 'manufacturer' || accountType === 'both') &&
+        (!formData.factoryName || !formData.factoryAddress || !formData.specialization)) {
       toast.error("يرجى ملء جميع بيانات المصنع بما في ذلك التخصص");
       return;
     }
 
     setLoading(true);
     try {
-      // NOTE: profileData includes idFrontBase64 & idBackBase64 as Base64 strings (≤900KB each)
-      const profileData = {
-        ...formData,
-        accountType,
-      };
-
+      // 1) أنشئ الحساب + خزّن باقي بيانات البروفايل حسب منطقك الحالي
+      const profileData = { ...formData, accountType };
       await register(formData.email, formData.password, profileData);
-      console.log("Registration data:", { accountType, ...formData });
-      toast.success("تم إنشاء الحساب بنجاح");
+
+      // 2) احفظ صور البطاقة في Firestore داخل users/{uid}
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error("تعذّر الحصول على المستخدم بعد التسجيل");
+
+      const max = SAFE_MAX_BYTES;
+      const sizeFront = Math.ceil((formData.idFrontBase64.length - "data:image/jpeg;base64,".length) * 3 / 4);
+      const sizeBack  = Math.ceil((formData.idBackBase64.length  - "data:image/jpeg;base64,".length) * 3 / 4);
+      if (sizeFront > max || sizeBack > max) {
+        throw new Error("حجم صورة البطاقة أكبر من الحدّ الآمن. صغّرها قبل الحفظ.");
+      }
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          idFrontBase64: formData.idFrontBase64,
+          idBackBase64: formData.idBackBase64,
+          idImagesUpdatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      toast.success("تم إنشاء الحساب وحفظ صور البطاقة بنجاح ✅");
       navigate('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration error:", error);
-      toast.error("خطأ في إنشاء الحساب. يرجى المحاولة مرة أخرى");
+      toast.error(error?.message || "خطأ في إنشاء الحساب. يرجى المحاولة مرة أخرى");
     } finally {
       setLoading(false);
     }
@@ -274,11 +284,7 @@ const Register = () => {
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow-sm px-4 py-4">
         <div className="flex items-center gap-3">
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={handleBack}
-          >
+          <Button variant="ghost" size="icon" onClick={handleBack}>
             <ArrowRight className="w-5 h-5" />
           </Button>
           <h1 className="text-lg font-semibold dark:text-white">إنشاء حساب جديد</h1>
@@ -299,8 +305,8 @@ const Register = () => {
                   <button
                     onClick={() => setAccountType('client')}
                     className={`p-6 rounded-lg border-2 transition-all ${
-                      accountType === 'client' 
-                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                      accountType === 'client'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                         : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                     }`}
                   >
@@ -312,12 +318,12 @@ const Register = () => {
                       <p className="text-sm text-gray-600 dark:text-gray-300">أبحث عن خدمات تصنيع</p>
                     </div>
                   </button>
-                  
+
                   <button
                     onClick={() => setAccountType('manufacturer')}
                     className={`p-6 rounded-lg border-2 transition-all ${
-                      accountType === 'manufacturer' 
-                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                      accountType === 'manufacturer'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                         : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                     }`}
                   >
@@ -333,8 +339,8 @@ const Register = () => {
                   <button
                     onClick={() => setAccountType('both')}
                     className={`p-6 rounded-lg border-2 transition-all ${
-                      accountType === 'both' 
-                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                      accountType === 'both'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                         : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                     }`}
                   >
@@ -347,8 +353,8 @@ const Register = () => {
                     </div>
                   </button>
                 </div>
-                
-                <Button 
+
+                <Button
                   className="w-full bg-green-600 hover:bg-green-700 text-white py-3 mt-6"
                   onClick={handleNext}
                   disabled={!accountType}
@@ -399,8 +405,9 @@ const Register = () => {
                 {/* ID Photo Upload (Front + Back) */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    صور البطاقة * <span className="text-xs text-gray-500">(يتم الضغط تلقائيًا — حد آمن ≤ 900KB لكل صورة)</span>
+                    صور البطاقة * <span className="text-xs text-gray-500">(JPEG Base64 — حد آمن ≤ 900KB لكل صورة)</span>
                   </label>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Front */}
                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
@@ -469,7 +476,7 @@ const Register = () => {
                         <Factory className="w-5 h-5" />
                         بيانات المصنع
                       </h3>
-                      
+
                       {/* Factory Name */}
                       <div className="space-y-2 mb-4">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">اسم المصنع *</label>
@@ -518,7 +525,7 @@ const Register = () => {
                   </>
                 )}
 
-                <Button 
+                <Button
                   className="w-full bg-green-600 hover:bg-green-700 text-white py-3"
                   onClick={handleNext}
                 >
@@ -554,8 +561,8 @@ const Register = () => {
                 {/* City */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">المحافظة/المدينة *</label>
-                  <Select 
-                    value={formData.city} 
+                  <Select
+                    value={formData.city}
                     onValueChange={(value) => handleInputChange('city', value)}
                     disabled={!formData.country}
                   >
@@ -632,7 +639,7 @@ const Register = () => {
                 {/* Security Section */}
                 <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">الأمان</h3>
-                  
+
                   {/* Password */}
                   <div className="space-y-2 mb-4">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">كلمة المرور *</label>
@@ -720,7 +727,7 @@ const Register = () => {
                 </div>
 
                 {/* Register Button */}
-                <Button 
+                <Button
                   className="w-full bg-green-600 hover:bg-green-700 text-white py-3 flex items-center gap-2 mt-6"
                   onClick={handleRegister}
                   disabled={loading || !acceptedTerms}
@@ -733,8 +740,8 @@ const Register = () => {
                 <div className="text-center pt-4">
                   <p className="text-gray-600 dark:text-gray-300 text-sm">
                     لديك حساب بالفعل؟{" "}
-                    <Button 
-                      variant="link" 
+                    <Button
+                      variant="link"
                       className="text-green-600 dark:text-green-400 p-0 h-auto font-semibold"
                       onClick={() => navigate('/login')}
                     >
