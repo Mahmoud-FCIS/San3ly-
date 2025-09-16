@@ -1,14 +1,8 @@
+
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getUserRequests,
-  getRequestsBySpecialization,
-  getCompletedRequestsByManufacturer,
-  getAllCurrentRequests,
-  ManufacturingRequest,
-  deleteRequest
-} from "@/services/requestService";
+import { getUserRequests, getRequestsBySpecialization, getCompletedRequestsByManufacturer, getAllCurrentRequests, ManufacturingRequest, deleteRequest } from "@/services/requestService";
 import { useToast } from "@/hooks/use-toast";
 import RequestDetailsModal from "@/components/RequestDetailsModal";
 import RequestsHeader from "@/components/requests/RequestsHeader";
@@ -22,36 +16,24 @@ import LoadingDisplay from "@/components/requests/LoadingDisplay";
 import AddOfferModal from "@/components/AddOfferModal";
 import ViewOffersModal from "@/components/ViewOffersModal";
 
-// ✅ نوع موسّع يضيف حقول الصور (Base64) من غير ما نغيّر الـ service
-type RequestWithImages = ManufacturingRequest & {
-  mainImageBase64?: string | null;
-  extraImageBase64?: string | null;
-};
-
 const Requests = () => {
   const location = useLocation();
   const { currentUser, userProfile } = useAuth();
   const { toast } = useToast();
-
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("الكل");
-
-  // ✅ استبدال ManufacturingRequest بالنوع الموسّع
-  const [myRequests, setMyRequests] = useState<RequestWithImages[]>([]);
-  const [availableRequests, setAvailableRequests] = useState<RequestWithImages[]>([]);
-  const [completedRequests, setCompletedRequests] = useState<RequestWithImages[]>([]);
-  const [currentRequests, setCurrentRequests] = useState<RequestWithImages[]>([]);
-
+  const [myRequests, setMyRequests] = useState<ManufacturingRequest[]>([]);
+  const [availableRequests, setAvailableRequests] = useState<ManufacturingRequest[]>([]);
+  const [completedRequests, setCompletedRequests] = useState<ManufacturingRequest[]>([]);
+  const [currentRequests, setCurrentRequests] = useState<ManufacturingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [selectedRequest, setSelectedRequest] = useState<RequestWithImages | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ManufacturingRequest | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
   const [deletingRequest, setDeletingRequest] = useState<string | null>(null);
   const [isAddOfferModalOpen, setIsAddOfferModalOpen] = useState(false);
   const [isViewOffersModalOpen, setIsViewOffersModalOpen] = useState(false);
-  const [selectedRequestForOffer, setSelectedRequestForOffer] = useState<RequestWithImages | null>(null);
+  const [selectedRequestForOffer, setSelectedRequestForOffer] = useState<ManufacturingRequest | null>(null);
 
   // Check account types
   const isClient = userProfile?.accountType === 'client';
@@ -77,16 +59,18 @@ const Requests = () => {
         accountType: userProfile.accountType,
         specialization: userProfile.specialization
       });
-
-      // Load user's own requests
+      
+      // Load user's own requests for clients and both account types
       if (isClient || isBoth) {
+        console.log("📥 تحميل طلبات المستخدم الخاصة...");
         try {
           const userOwnRequests = await getUserRequests(currentUser.uid);
-          setMyRequests(userOwnRequests as RequestWithImages[]);
-
-          // current for client
+          console.log(`✅ تم تحميل ${userOwnRequests.length} طلب خاص بالمستخدم`);
+          setMyRequests(userOwnRequests);
+          
+          // تحميل جميع الطلبات الحالية للعميل
           const clientCurrentRequests = await getAllCurrentRequests(currentUser.uid, 'client');
-          setCurrentRequests(clientCurrentRequests as RequestWithImages[]);
+          setCurrentRequests(clientCurrentRequests);
         } catch (userRequestsError) {
           console.error("❌ خطأ في تحميل طلبات المستخدم:", userRequestsError);
           const userErrorMessage = userRequestsError instanceof Error ? userRequestsError.message : "خطأ في تحميل طلباتك الخاصة";
@@ -99,37 +83,51 @@ const Requests = () => {
           setCurrentRequests([]);
         }
       }
-
-      // Load available for manufacturer
+      
+      // Load available requests for manufacturers and both account types
       if (isManufacturer || isBoth) {
         if (userProfile.specialization && userProfile.specialization.trim() !== '') {
+          console.log(`🏭 تحميل الطلبات المتاحة للنشاط: "${userProfile.specialization}"`);
           try {
             const specializationRequests = await getRequestsBySpecialization(userProfile.specialization);
-            const filteredRequests = isBoth
-              ? (specializationRequests as RequestWithImages[]).filter(req => req.uid !== currentUser.uid)
-              : (specializationRequests as RequestWithImages[]);
+            console.log(`📊 تم استرجاع ${specializationRequests.length} طلب من قاعدة البيانات`);
+            
+            // Filter out own requests for 'both' account type
+            const filteredRequests = isBoth 
+              ? specializationRequests.filter(req => {
+                  const isNotOwn = req.uid !== currentUser.uid;
+                  if (!isNotOwn) {
+                    console.log(`🚫 تم تصفية الطلب الخاص بالمستخدم: ${req.requestId}`);
+                  }
+                  return isNotOwn;
+                })
+              : specializationRequests;
+            
+            console.log(`✅ تم تحميل ${filteredRequests.length} طلب متاح بعد التصفية`);
             setAvailableRequests(filteredRequests);
-
-            // completed for manufacturer
+            
+            // Load completed requests for manufacturers
             try {
               const manufacturerCompletedRequests = await getCompletedRequestsByManufacturer(currentUser.uid);
-              setCompletedRequests(manufacturerCompletedRequests as RequestWithImages[]);
+              console.log(`✅ تم تحميل ${manufacturerCompletedRequests.length} طلب مكتمل للمصنع`);
+              setCompletedRequests(manufacturerCompletedRequests);
             } catch (completedError) {
               console.error("❌ خطأ في تحميل الطلبات المكتملة:", completedError);
               setCompletedRequests([]);
             }
-
-            // current for manufacturer (if not both)
+            
+            // تحميل جميع الطلبات الحالية للمصنع (إذا لم يكن عميل وأصنع)
             if (!isBoth) {
               try {
                 const manufacturerCurrentRequests = await getAllCurrentRequests(currentUser.uid, 'manufacturer');
-                setCurrentRequests(manufacturerCurrentRequests as RequestWithImages[]);
+                setCurrentRequests(manufacturerCurrentRequests);
               } catch (currentError) {
                 console.error("❌ خطأ في تحميل الطلبات الحالية للمصنع:", currentError);
                 setCurrentRequests([]);
               }
             }
-
+            
+            // عرض رسالة نجاح
             if (filteredRequests.length > 0) {
               toast({
                 title: "تم تحميل الطلبات",
@@ -139,13 +137,13 @@ const Requests = () => {
             }
           } catch (specializationError) {
             console.error("❌ خطأ في تحميل طلبات النشاط:", specializationError);
-            const specializationErrorMessage = specializationError instanceof Error
-              ? specializationError.message
+            const specializationErrorMessage = specializationError instanceof Error 
+              ? specializationError.message 
               : "خطأ غير معروف في تحميل الطلبات المتاحة";
-
+            
             setError(specializationErrorMessage);
             setAvailableRequests([]);
-
+            
             toast({
               title: "خطأ في تحميل الطلبات المتاحة",
               description: specializationErrorMessage,
@@ -182,11 +180,12 @@ const Requests = () => {
     loadRequests();
   }, [currentUser, userProfile]);
 
-  // Refresh after navigation back from creating request
+  // Refresh requests when returning from new request page
   useEffect(() => {
-    if ((location as any).state?.refresh) {
+    if (location.state?.refresh) {
       console.log("🔄 تحديث الطلبات بسبب تغيير الحالة");
       loadRequests();
+      // Clear the state to prevent unnecessary refreshes
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -196,7 +195,8 @@ const Requests = () => {
     loadRequests();
   };
 
-  const handleDeleteRequest = async (request: RequestWithImages) => {
+  const handleDeleteRequest = async (request: ManufacturingRequest) => {
+    // Check if request can be deleted
     if (request.status !== 'نشط') {
       toast({
         title: "لا يمكن الحذف",
@@ -213,7 +213,7 @@ const Requests = () => {
         title: "تم الحذف",
         description: "تم حذف الطلب بنجاح",
       });
-      loadRequests();
+      loadRequests(); // Refresh the list
     } catch (error) {
       console.error('Error deleting request:', error);
       const errorMessage = error instanceof Error ? error.message : "حدث خطأ أثناء حذف الطلب";
@@ -227,27 +227,25 @@ const Requests = () => {
     }
   };
 
-  // ✅ إبقاء فتح التفاصيل كما هو؛ الـ request الآن ممكن يحتوي mainImageBase64/extraImageBase64
-  const handleViewRequest = (request: RequestWithImages) => {
+  const handleViewRequest = (request: ManufacturingRequest) => {
     setSelectedRequest(request);
     setIsModalOpen(true);
   };
 
-  const handleAddOffer = (request: RequestWithImages) => {
+  const handleAddOffer = (request: ManufacturingRequest) => {
     setSelectedRequestForOffer(request);
     setIsAddOfferModalOpen(true);
   };
 
-  const handleViewOffers = (request: RequestWithImages) => {
+  const handleViewOffers = (request: ManufacturingRequest) => {
     setSelectedRequest(request);
     setIsViewOffersModalOpen(true);
   };
 
-  const filterRequests = (requests: RequestWithImages[]) => {
+  const filterRequests = (requests: ManufacturingRequest[]) => {
     return requests.filter(request => {
-      const matchesSearch =
-        request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        request.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           request.description.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = selectedStatus === "الكل" || request.status === selectedStatus;
       return matchesSearch && matchesStatus;
     });
@@ -260,12 +258,12 @@ const Requests = () => {
   if (error && !isClient && !isBoth) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <RequestsHeader
+        <RequestsHeader 
           userProfile={userProfile}
           canCreateRequests={canCreateRequests}
           onRefresh={handleRefresh}
         />
-        <ErrorDisplay
+        <ErrorDisplay 
           error={error}
           canCreateRequests={canCreateRequests}
           onRefresh={handleRefresh}
@@ -276,13 +274,13 @@ const Requests = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <RequestsHeader
+      <RequestsHeader 
         userProfile={userProfile}
         canCreateRequests={canCreateRequests}
         onRefresh={handleRefresh}
       />
 
-      <SearchAndFilter
+      <SearchAndFilter 
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         selectedStatus={selectedStatus}
@@ -291,7 +289,7 @@ const Requests = () => {
       />
 
       <div className="px-4 pb-20 space-y-6">
-        {/* Current */}
+        {/* Current Requests Section - for all users */}
         <CurrentRequestsSection
           requests={currentRequests}
           filteredRequests={filterRequests(currentRequests)}
@@ -299,7 +297,7 @@ const Requests = () => {
           title={isClient || isBoth ? "طلباتي الحالية" : "الطلبات الحالية التي أعمل عليها"}
         />
 
-        {/* My Requests */}
+        {/* My Requests Section - for clients and both account types */}
         {(isClient || isBoth) && (
           <MyRequestsSection
             requests={myRequests}
@@ -311,7 +309,7 @@ const Requests = () => {
           />
         )}
 
-        {/* Available */}
+        {/* Available Requests Section - for manufacturers and both account types */}
         {(isManufacturer || isBoth) && (
           <AvailableRequestsSection
             requests={availableRequests}
@@ -322,7 +320,7 @@ const Requests = () => {
           />
         )}
 
-        {/* Completed */}
+        {/* Completed Requests Section */}
         {isClient && (
           <CompletedRequestsSection
             requests={myRequests}
@@ -342,9 +340,9 @@ const Requests = () => {
         )}
       </div>
 
-      {/* Details Modal - سيستقبل request وفيه الصور Base64 إن وُجدت */}
+      {/* Request Details Modal */}
       <RequestDetailsModal
-        request={selectedRequest as ManufacturingRequest | null}
+        request={selectedRequest}
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
@@ -353,9 +351,9 @@ const Requests = () => {
         onRequestUpdate={loadRequests}
       />
 
-      {/* Add Offer */}
+      {/* Add Offer Modal */}
       <AddOfferModal
-        request={selectedRequestForOffer as ManufacturingRequest | null}
+        request={selectedRequestForOffer}
         isOpen={isAddOfferModalOpen}
         onClose={() => {
           setIsAddOfferModalOpen(false);
@@ -364,9 +362,9 @@ const Requests = () => {
         onOfferCreated={loadRequests}
       />
 
-      {/* View Offers */}
+      {/* View Offers Modal */}
       <ViewOffersModal
-        request={selectedRequest as ManufacturingRequest | null}
+        request={selectedRequest}
         isOpen={isViewOffersModalOpen}
         onClose={() => {
           setIsViewOffersModalOpen(false);
