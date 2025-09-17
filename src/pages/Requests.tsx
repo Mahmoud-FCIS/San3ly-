@@ -117,7 +117,7 @@ const Requests = () => {
             // ✅ إصلاح: استبعد طلبات المستخدم بنفس الـ userId (ليس uid)
             const filteredRequests =
               isBoth
-                ? specializationRequests.filter((req) => req.userId !== currentUser.uid)
+                ? specializationRequests.filter((req) => req.uid !== currentUser.uid)
                 : specializationRequests;
 
             setAvailableRequests(filteredRequests);
