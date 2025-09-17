@@ -1,8 +1,13 @@
-
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUserRequests, getRequestsBySpecialization, getCompletedRequestsByManufacturer, getAllCurrentRequests, ManufacturingRequest, deleteRequest } from "@/services/requestService";
+import {
+  getRequestsBySpecialization,
+  getCompletedRequestsByManufacturer,
+  getAllCurrentRequests,
+  ManufacturingRequest,
+  deleteRequest
+} from "@/services/requestService";
 import { useToast } from "@/hooks/use-toast";
 import RequestDetailsModal from "@/components/RequestDetailsModal";
 import RequestsHeader from "@/components/requests/RequestsHeader";
@@ -16,36 +21,85 @@ import LoadingDisplay from "@/components/requests/LoadingDisplay";
 import AddOfferModal from "@/components/AddOfferModal";
 import ViewOffersModal from "@/components/ViewOffersModal";
 
+// 🔴 جديد: جلب لحظي من فايرستور لطلبات المستخدم
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 const Requests = () => {
   const location = useLocation();
   const { currentUser, userProfile } = useAuth();
   const { toast } = useToast();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("الكل");
+
   const [myRequests, setMyRequests] = useState<ManufacturingRequest[]>([]);
   const [availableRequests, setAvailableRequests] = useState<ManufacturingRequest[]>([]);
   const [completedRequests, setCompletedRequests] = useState<ManufacturingRequest[]>([]);
   const [currentRequests, setCurrentRequests] = useState<ManufacturingRequest[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [selectedRequest, setSelectedRequest] = useState<ManufacturingRequest | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
   const [deletingRequest, setDeletingRequest] = useState<string | null>(null);
+
   const [isAddOfferModalOpen, setIsAddOfferModalOpen] = useState(false);
   const [isViewOffersModalOpen, setIsViewOffersModalOpen] = useState(false);
   const [selectedRequestForOffer, setSelectedRequestForOffer] = useState<ManufacturingRequest | null>(null);
 
-  // Check account types
-  const isClient = userProfile?.accountType === 'client';
-  const isManufacturer = userProfile?.accountType === 'manufacturer';
-  const isBoth = userProfile?.accountType === 'both';
+  // account type
+  const isClient = userProfile?.accountType === "client";
+  const isManufacturer = userProfile?.accountType === "manufacturer";
+  const isBoth = userProfile?.accountType === "both";
   const canCreateRequests = isClient || isBoth;
 
   const statuses = ["الكل", "نشط", "قيد المراجعة", "قيد التنفيذ", "مكتمل", "ملغي"];
 
+  // ⏱️ اشترك لحظيًا في طلبات المستخدم (userId) — تظهر فور الإرسال
+  useEffect(() => {
+    if (!currentUser) return;
+    // نعرض "طلباتي" فقط للعملاء أو الحسابين
+    if (!(isClient || isBoth)) return;
+
+    const col = collection(db, "manufacturingRequests");
+    const q = query(col, where("userId", "==", currentUser.uid));
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const docs: ManufacturingRequest[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            requestId: data.requestId || d.id,
+            title: data.title || "",
+            description: data.description || "",
+            status: data.status || "نشط",
+            ...data,
+          } as ManufacturingRequest;
+        });
+
+        // حدّث "طلباتي"
+        setMyRequests(docs);
+
+        // استخرج الطلبات الحالية (غير مكتملة/غير ملغاة)
+        const activeStatuses = new Set(["نشط", "قيد المراجعة", "قيد التنفيذ"]);
+        setCurrentRequests(docs.filter((r) => activeStatuses.has(r.status)));
+      },
+      (err) => {
+        console.error("onSnapshot error (myRequests):", err);
+      }
+    );
+
+    return () => unsub();
+  }, [currentUser, isClient, isBoth]);
+
+  // 🌐 تحميل الأقسام الأخرى (متاحة/مكتملة/جارية للمصنّع)
   const loadRequests = async () => {
     if (!currentUser || !userProfile) {
-      console.log("❌ لا يوجد مستخدم حالي أو ملف تعريف");
       setLoading(false);
       return;
     }
@@ -54,173 +108,93 @@ const Requests = () => {
     setError(null);
 
     try {
-      console.log("🔄 تحميل الطلبات للمستخدم:", {
-        uid: currentUser.uid,
-        accountType: userProfile.accountType,
-        specialization: userProfile.specialization
-      });
-      
-      // Load user's own requests for clients and both account types
-      if (isClient || isBoth) {
-        console.log("📥 تحميل طلبات المستخدم الخاصة...");
-        try {
-          const userOwnRequests = await getUserRequests(currentUser.uid);
-          console.log(`✅ تم تحميل ${userOwnRequests.length} طلب خاص بالمستخدم`);
-          setMyRequests(userOwnRequests);
-          
-          // تحميل جميع الطلبات الحالية للعميل
-          const clientCurrentRequests = await getAllCurrentRequests(currentUser.uid, 'client');
-          setCurrentRequests(clientCurrentRequests);
-        } catch (userRequestsError) {
-          console.error("❌ خطأ في تحميل طلبات المستخدم:", userRequestsError);
-          const userErrorMessage = userRequestsError instanceof Error ? userRequestsError.message : "خطأ في تحميل طلباتك الخاصة";
-          toast({
-            title: "تحذير",
-            description: `خطأ في تحميل طلباتك الخاصة: ${userErrorMessage}`,
-            variant: "destructive"
-          });
-          setMyRequests([]);
-          setCurrentRequests([]);
-        }
-      }
-      
-      // Load available requests for manufacturers and both account types
+      // للـ manufacturer أو both — جلب الطلبات وفق التخصص
       if (isManufacturer || isBoth) {
-        if (userProfile.specialization && userProfile.specialization.trim() !== '') {
-          console.log(`🏭 تحميل الطلبات المتاحة للنشاط: "${userProfile.specialization}"`);
+        if (userProfile.specialization && userProfile.specialization.trim() !== "") {
           try {
             const specializationRequests = await getRequestsBySpecialization(userProfile.specialization);
-            console.log(`📊 تم استرجاع ${specializationRequests.length} طلب من قاعدة البيانات`);
-            
-            // Filter out own requests for 'both' account type
-            const filteredRequests = isBoth 
-              ? specializationRequests.filter(req => {
-                  const isNotOwn = req.uid !== currentUser.uid;
-                  if (!isNotOwn) {
-                    console.log(`🚫 تم تصفية الطلب الخاص بالمستخدم: ${req.requestId}`);
-                  }
-                  return isNotOwn;
-                })
-              : specializationRequests;
-            
-            console.log(`✅ تم تحميل ${filteredRequests.length} طلب متاح بعد التصفية`);
+
+            // ✅ إصلاح: استبعد طلبات المستخدم بنفس الـ userId (ليس uid)
+            const filteredRequests =
+              isBoth
+                ? specializationRequests.filter((req) => req.userId !== currentUser.uid)
+                : specializationRequests;
+
             setAvailableRequests(filteredRequests);
-            
-            // Load completed requests for manufacturers
+
+            // مكتملة للمصنّع
             try {
               const manufacturerCompletedRequests = await getCompletedRequestsByManufacturer(currentUser.uid);
-              console.log(`✅ تم تحميل ${manufacturerCompletedRequests.length} طلب مكتمل للمصنع`);
               setCompletedRequests(manufacturerCompletedRequests);
             } catch (completedError) {
-              console.error("❌ خطأ في تحميل الطلبات المكتملة:", completedError);
+              console.error("خطأ في تحميل الطلبات المكتملة:", completedError);
               setCompletedRequests([]);
             }
-            
-            // تحميل جميع الطلبات الحالية للمصنع (إذا لم يكن عميل وأصنع)
+
+            // الطلبات الجارية للمصنّع فقط (لو مش both)
             if (!isBoth) {
               try {
-                const manufacturerCurrentRequests = await getAllCurrentRequests(currentUser.uid, 'manufacturer');
+                const manufacturerCurrentRequests = await getAllCurrentRequests(currentUser.uid, "manufacturer");
                 setCurrentRequests(manufacturerCurrentRequests);
               } catch (currentError) {
-                console.error("❌ خطأ في تحميل الطلبات الحالية للمصنع:", currentError);
-                setCurrentRequests([]);
+                console.error("خطأ في تحميل الطلبات الحالية للمصنع:", currentError);
               }
             }
-            
-            // عرض رسالة نجاح
-            if (filteredRequests.length > 0) {
-              toast({
-                title: "تم تحميل الطلبات",
-                description: `تم العثور على ${filteredRequests.length} طلب متاح في نشاط "${userProfile.specialization}"`,
-                variant: "default"
-              });
-            }
-          } catch (specializationError) {
-            console.error("❌ خطأ في تحميل طلبات النشاط:", specializationError);
-            const specializationErrorMessage = specializationError instanceof Error 
-              ? specializationError.message 
-              : "خطأ غير معروف في تحميل الطلبات المتاحة";
-            
-            setError(specializationErrorMessage);
+          } catch (specializationError: any) {
+            const msg =
+              specializationError?.message || "خطأ غير معروف في تحميل الطلبات المتاحة";
+            setError(msg);
             setAvailableRequests([]);
-            
-            toast({
-              title: "خطأ في تحميل الطلبات المتاحة",
-              description: specializationErrorMessage,
-              variant: "destructive"
-            });
+            console.error("خطأ في تحميل طلبات النشاط:", specializationError);
           }
         } else {
-          console.warn("⚠️ لم يتم تحديد تخصص للمصنع");
-          const noSpecializationError = "لم يتم تحديد تخصص للمصنع. يرجى تحديث بيانات الحساب وتحديد النشاط المناسب";
-          setError(noSpecializationError);
-          toast({
-            title: "تحديث البيانات مطلوب",
-            description: noSpecializationError,
-            variant: "destructive"
-          });
+          const msg = "لم يتم تحديد تخصص للمصنع. يرجى تحديث بيانات الحساب وتحديد النشاط المناسب";
+          setError(msg);
         }
       }
-    } catch (error) {
-      console.error("❌ خطأ عام في تحميل الطلبات:", error);
-      const errorMessage = error instanceof Error ? error.message : "خطأ غير معروف في تحميل الطلبات";
-      setError(errorMessage);
-      toast({
-        title: "خطأ في تحميل الطلبات",
-        description: errorMessage,
-        variant: "destructive"
-      });
+    } catch (e: any) {
+      const msg = e?.message || "خطأ غير معروف في تحميل الطلبات";
+      setError(msg);
     } finally {
       setLoading(false);
-      console.log("✅ انتهى تحميل الطلبات");
     }
   };
 
+  // تحميل عند الجاهزية + عند الرجوع من إنشاء طلب ومعه refresh
   useEffect(() => {
-    loadRequests();
-  }, [currentUser, userProfile]);
+    if (currentUser && userProfile) loadRequests();
+  }, [currentUser, userProfile?.accountType, userProfile?.specialization]);
 
-  // Refresh requests when returning from new request page
   useEffect(() => {
-    if (location.state?.refresh) {
-      console.log("🔄 تحديث الطلبات بسبب تغيير الحالة");
+    // رجوع من صفحة NewRequest مع state.refresh=true
+    // (تم تمريرها عند navigate بعد الحفظ). 
+    // سنعيد تحميل القوائم. :contentReference[oaicite:5]{index=5}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyLocation = location as any;
+    if (anyLocation?.state?.refresh) {
       loadRequests();
-      // Clear the state to prevent unnecessary refreshes
-      window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+  }, [location]);
 
-  const handleRefresh = () => {
-    console.log("🔄 تحديث يدوي للطلبات");
-    loadRequests();
-  };
+  const handleRefresh = () => loadRequests();
 
   const handleDeleteRequest = async (request: ManufacturingRequest) => {
-    // Check if request can be deleted
-    if (request.status !== 'نشط') {
-      toast({
-        title: "لا يمكن الحذف",
-        description: "لا يمكن حذف الطلبات التي قيد التنفيذ أو المكتملة",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setDeletingRequest(request.id || '');
+    if (!request?.requestId) return;
+    setDeletingRequest(request.id || "");
     try {
       await deleteRequest(request.requestId);
       toast({
         title: "تم الحذف",
         description: "تم حذف الطلب بنجاح",
       });
-      loadRequests(); // Refresh the list
-    } catch (error) {
-      console.error('Error deleting request:', error);
-      const errorMessage = error instanceof Error ? error.message : "حدث خطأ أثناء حذف الطلب";
+      // myRequests يتم تحديثها تلقائياً من onSnapshot
+      loadRequests(); // لتحديث الأقسام الأخرى
+    } catch (error: any) {
+      console.error("Error deleting request:", error);
       toast({
         title: "خطأ",
-        description: errorMessage,
-        variant: "destructive"
+        description: error?.message || "حدث خطأ أثناء حذف الطلب",
+        variant: "destructive",
       });
     } finally {
       setDeletingRequest(null);
@@ -243,9 +217,10 @@ const Requests = () => {
   };
 
   const filterRequests = (requests: ManufacturingRequest[]) => {
-    return requests.filter(request => {
-      const matchesSearch = request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           request.description.toLowerCase().includes(searchTerm.toLowerCase());
+    return requests.filter((request) => {
+      const matchesSearch =
+        request.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        request.description?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = selectedStatus === "الكل" || request.status === selectedStatus;
       return matchesSearch && matchesStatus;
     });
@@ -258,12 +233,12 @@ const Requests = () => {
   if (error && !isClient && !isBoth) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <RequestsHeader 
+        <RequestsHeader
           userProfile={userProfile}
           canCreateRequests={canCreateRequests}
           onRefresh={handleRefresh}
         />
-        <ErrorDisplay 
+        <ErrorDisplay
           error={error}
           canCreateRequests={canCreateRequests}
           onRefresh={handleRefresh}
@@ -274,13 +249,14 @@ const Requests = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <RequestsHeader 
+      <RequestsHeader
         userProfile={userProfile}
         canCreateRequests={canCreateRequests}
         onRefresh={handleRefresh}
       />
 
-      <SearchAndFilter 
+      {/* نفس مكوّن الفلاتر الحالي مع تمرير الحالة والبحث */}
+      <SearchAndFilter
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         selectedStatus={selectedStatus}
@@ -289,7 +265,7 @@ const Requests = () => {
       />
 
       <div className="px-4 pb-20 space-y-6">
-        {/* Current Requests Section - for all users */}
+        {/* الطلبات الحالية — للجميع */}
         <CurrentRequestsSection
           requests={currentRequests}
           filteredRequests={filterRequests(currentRequests)}
@@ -297,7 +273,7 @@ const Requests = () => {
           title={isClient || isBoth ? "طلباتي الحالية" : "الطلبات الحالية التي أعمل عليها"}
         />
 
-        {/* My Requests Section - for clients and both account types */}
+        {/* طلباتي — للعميل و(عميل/مصنع) */}
         {(isClient || isBoth) && (
           <MyRequestsSection
             requests={myRequests}
@@ -309,7 +285,7 @@ const Requests = () => {
           />
         )}
 
-        {/* Available Requests Section - for manufacturers and both account types */}
+        {/* الطلبات المتاحة — للمصنع و(عميل/مصنع) */}
         {(isManufacturer || isBoth) && (
           <AvailableRequestsSection
             requests={availableRequests}
@@ -320,7 +296,7 @@ const Requests = () => {
           />
         )}
 
-        {/* Completed Requests Section */}
+        {/* المكتملة للعميل */}
         {isClient && (
           <CompletedRequestsSection
             requests={myRequests}
@@ -330,6 +306,7 @@ const Requests = () => {
           />
         )}
 
+        {/* المكتملة للمصنع */}
         {(isManufacturer || isBoth) && (
           <CompletedRequestsSection
             requests={completedRequests}
@@ -340,7 +317,7 @@ const Requests = () => {
         )}
       </div>
 
-      {/* Request Details Modal */}
+      {/* تفاصيل طلب */}
       <RequestDetailsModal
         request={selectedRequest}
         isOpen={isModalOpen}
@@ -351,7 +328,7 @@ const Requests = () => {
         onRequestUpdate={loadRequests}
       />
 
-      {/* Add Offer Modal */}
+      {/* إضافة عرض سعر */}
       <AddOfferModal
         request={selectedRequestForOffer}
         isOpen={isAddOfferModalOpen}
@@ -362,7 +339,7 @@ const Requests = () => {
         onOfferCreated={loadRequests}
       />
 
-      {/* View Offers Modal */}
+      {/* عروض الطلب */}
       <ViewOffersModal
         request={selectedRequest}
         isOpen={isViewOffersModalOpen}
