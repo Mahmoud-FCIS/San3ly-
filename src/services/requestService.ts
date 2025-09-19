@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase';
 export interface ManufacturingRequest {
   id?: string;
   requestId: string;
-  uid: string;
+  userId: string;
   title: string;
   description: string;
   quantity: string;
@@ -33,7 +33,7 @@ export const saveManufacturingRequest = async (uid: string, requestData: any): P
     
     const request: Omit<ManufacturingRequest, 'id'> = {
       requestId,
-      uid,
+      userId: uid,
       title: requestData.title,
       description: requestData.description,
       quantity: requestData.quantity,
@@ -94,7 +94,7 @@ export const getUserRequests = async (uid: string): Promise<ManufacturingRequest
         const request: ManufacturingRequest = {
           id: doc.id,
           requestId: data.requestId,
-          uid: data.uid,
+          userId: data.userId,
           title: data.title,
           description: data.description,
           quantity: data.quantity,
@@ -272,7 +272,7 @@ export const getRequestsBySpecialization = async (specialization: string): Promi
           const request: ManufacturingRequest = {
             id: docId,
             requestId: data.requestId || `REQ_${docId.slice(-8)}`,
-            uid: data.userId || '',
+            userId: data.userId || '',
             title: data.title || 'بدون عنوان',
             description: data.description || '',
             quantity: data.quantity || '',
@@ -502,7 +502,7 @@ export const getAllCurrentRequests = async (userId: string, userType: 'client' |
     
     if (userType === 'client') {
       // جلب جميع طلبات العميل
-      const clientQuery = query(requestsRef, where('uid', '==', userId));
+      const clientQuery = query(requestsRef, where('userId', '==', userId));
       const clientSnapshot = await getDocs(clientQuery);
       
       clientSnapshot.forEach((doc) => {
