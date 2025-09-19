@@ -272,7 +272,7 @@ export const getRequestsBySpecialization = async (specialization: string): Promi
           const request: ManufacturingRequest = {
             id: docId,
             requestId: data.requestId || `REQ_${docId.slice(-8)}`,
-            uid: data.uid || '',
+            uid: data.userId || '',
             title: data.title || 'بدون عنوان',
             description: data.description || '',
             quantity: data.quantity || '',
