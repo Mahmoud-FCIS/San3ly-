@@ -72,7 +72,7 @@ export const getUserRequests = async (uid: string): Promise<ManufacturingRequest
     
     const q = query(
       collection(db, 'manufacturingRequests'),
-      where('uid', '==', uid),
+      where('userId', '==', uid),
       orderBy('createdAt', 'desc')
     );
     
