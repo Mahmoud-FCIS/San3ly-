@@ -92,9 +92,9 @@ const Requests = () => {
             console.log(`📊 تم استرجاع ${specializationRequests.length} طلب من قاعدة البيانات`);
             
             // Filter out own requests for 'both' account type
-              const filteredRequests = isBoth 
+            const filteredRequests = isBoth 
               ? specializationRequests.filter(req => {
-                  const isNotOwn = req.userId !== currentUser.uid;
+                  const isNotOwn = req.uid !== currentUser.uid;
                   if (!isNotOwn) {
                     console.log(`🚫 تم تصفية الطلب الخاص بالمستخدم: ${req.requestId}`);
                   }
