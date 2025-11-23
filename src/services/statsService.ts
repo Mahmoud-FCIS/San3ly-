@@ -13,10 +13,10 @@ export const getDashboardStats = async (uid: string): Promise<DashboardStats> =>
   try {
     console.log('🔄 جلب إحصائيات المستخدم:', uid);
     
-    // جلب جميع طلبات المستخدم
+    // جلب جميع طلبات المستخدم (حقل المستخدم في collection هو userId)
     const requestsQuery = query(
       collection(db, 'manufacturingRequests'),
-      where('uid', '==', uid)
+      where('userId', '==', uid)
     );
     
     const requestsSnapshot = await getDocs(requestsQuery);

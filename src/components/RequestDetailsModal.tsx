@@ -37,7 +37,7 @@ const RequestDetailsModal = ({ request, isOpen, onClose, onRequestUpdate }: Requ
     
     setLoading(true);
     try {
-      const profile = await getUserProfile(request.uid);
+  const profile = await getUserProfile(request.userId);
       setClientName(profile?.fullName || 'عميل');
     } catch (error) {
       console.error('Error loading client info:', error);
@@ -88,7 +88,7 @@ const RequestDetailsModal = ({ request, isOpen, onClose, onRequestUpdate }: Requ
 
   // Check if current user is manufacturer and not the owner of the request
   const isManufacturer = userProfile?.accountType === 'manufacturer' || userProfile?.accountType === 'both';
-  const isRequestOwner = currentUser?.uid === request.uid;
+  const isRequestOwner = currentUser?.uid === request.userId;
   const canShowManufacturerActions = isManufacturer && !isRequestOwner && request.status === 'نشط';
 
   // Check if rating should be shown only for completed requests
@@ -115,7 +115,7 @@ const RequestDetailsModal = ({ request, isOpen, onClose, onRequestUpdate }: Requ
                       {!loading && (
                         <div className="flex items-center gap-2">
                           <UserRatingDisplay
-                            targetUid={request.uid}
+                            targetUid={request.userId}
                             targetName={clientName}
                             showAddRating={shouldShowAddRating}
                             compact={true}
@@ -238,7 +238,7 @@ const RequestDetailsModal = ({ request, isOpen, onClose, onRequestUpdate }: Requ
                   <div className="flex gap-3">
                     <StartConversationButton
                       requestId={request.requestId}
-                      clientId={request.uid}
+                      clientId={request.userId}
                       manufacturerId={currentUser?.uid || ''}
                     />
                     <Button
@@ -264,7 +264,7 @@ const RequestDetailsModal = ({ request, isOpen, onClose, onRequestUpdate }: Requ
       </Dialog>
 
       <ViewRatingsModal
-        targetUid={request?.uid || ''}
+        targetUid={request?.userId || ''}
         targetName={clientName}
         isOpen={showRatingsModal}
         onClose={() => setShowRatingsModal(false)}

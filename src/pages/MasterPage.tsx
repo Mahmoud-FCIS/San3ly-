@@ -35,7 +35,7 @@ interface User {
 interface Request {
   id: string;
   requestId: string;
-  uid: string;
+  userId: string;
   title: string;
   description: string;
   status: string;
@@ -193,7 +193,7 @@ const MasterPage = () => {
         requestsData.push({
           id: doc.id,
           requestId: data.requestId || '',
-          uid: data.uid || '',
+          userId: data.userId || '',
           title: data.title || '',
           description: data.description || '',
           status: data.status || '',
